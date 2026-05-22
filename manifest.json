@@ -10,6 +10,7 @@
         "https://www.xiaohongshu.com/*"
       ],
       "js": [
+        "src/config.js",
         "src/content.js"
       ],
       "run_at": "document_start",

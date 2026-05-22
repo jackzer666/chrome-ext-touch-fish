@@ -1,25 +1,55 @@
 (function () {
   "use strict";
 
-  const BLOCK_CLASS = "tf-image-blocker-block";
-  const REPLACED_ATTR = "data-tf-image-blocker-replaced";
-  const STYLE_ID = "tf-image-blocker-style";
-  const OBSERVED_ATTRS = ["src", "srcset", "style", "class", "poster"];
-  const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const DEFAULT_CONFIG = {
+    blockClass: "tf-image-blocker-block",
+    replacedAttr: "data-tf-image-blocker-replaced",
+    styleId: "tf-image-blocker-style",
+    customStyleId: "tf-image-blocker-custom-style",
+    colorSchemeQuery: "(prefers-color-scheme: dark)",
+    blockColors: {
+      dark: "#000",
+      light: "#fff"
+    },
+    observedAttributes: ["src", "srcset", "style", "class", "poster"],
+    mediaSelector: "img, picture, video",
+    backgroundCandidateSelector: "[style], div, a, span, section, article, header, footer, main, li, button",
+    customCssRules: []
+  };
+  const CONFIG = Object.assign({}, DEFAULT_CONFIG, window.TOUCH_FISH_CONFIG || {});
+  CONFIG.blockColors = Object.assign({}, DEFAULT_CONFIG.blockColors, CONFIG.blockColors || {});
+  CONFIG.observedAttributes = Array.isArray(CONFIG.observedAttributes)
+    ? CONFIG.observedAttributes
+    : DEFAULT_CONFIG.observedAttributes;
+  CONFIG.customCssRules = Array.isArray(CONFIG.customCssRules) ? CONFIG.customCssRules : [];
+  CONFIG.mediaSelector = CONFIG.mediaSelector || DEFAULT_CONFIG.mediaSelector;
+  CONFIG.backgroundCandidateSelector = CONFIG.backgroundCandidateSelector || DEFAULT_CONFIG.backgroundCandidateSelector;
+  const darkModeQuery = window.matchMedia(CONFIG.colorSchemeQuery);
 
   function getBlockColor() {
-    return darkModeQuery.matches ? "#000" : "#fff";
+    return darkModeQuery.matches ? CONFIG.blockColors.dark : CONFIG.blockColors.light;
+  }
+
+  function serializeCSS(rules) {
+    return rules
+      .map((rule) => {
+        const props = Object.entries(rule.properties || {})
+          .map(([key, value]) => `${key}: ${value} !important;`)
+          .join(" ");
+        return `${rule.selector} { ${props} }`;
+      })
+      .join("\n");
   }
 
   function installStyle() {
-    if (document.getElementById(STYLE_ID)) {
+    if (document.getElementById(CONFIG.styleId)) {
       return;
     }
 
     const style = document.createElement("style");
-    style.id = STYLE_ID;
+    style.id = CONFIG.styleId;
     style.textContent = `
-      .${BLOCK_CLASS} {
+      .${CONFIG.blockClass} {
         background: var(--tf-image-blocker-color, #000) !important;
         background-image: none !important;
         box-sizing: border-box !important;
@@ -30,6 +60,21 @@
 
     const target = document.head || document.documentElement;
     target.appendChild(style);
+  }
+
+  function injectCSS(rules) {
+    if (!rules.length) {
+      return;
+    }
+
+    let styleEl = document.getElementById(CONFIG.customStyleId);
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = CONFIG.customStyleId;
+      const target = document.head || document.documentElement;
+      target.appendChild(styleEl);
+    }
+    styleEl.textContent = serializeCSS(rules);
   }
 
   function getElementBox(element, computed) {
@@ -86,20 +131,20 @@
   }
 
   function replaceWithBlock(element) {
-    if (element.getAttribute(REPLACED_ATTR) === "true" || !element.parentNode) {
+    if (element.getAttribute(CONFIG.replacedAttr) === "true" || !element.parentNode) {
       return;
     }
 
     const computed = window.getComputedStyle(element);
     const block = document.createElement("div");
 
-    block.className = BLOCK_CLASS;
+    block.className = CONFIG.blockClass;
     block.setAttribute("aria-hidden", "true");
-    block.setAttribute(REPLACED_ATTR, "true");
+    block.setAttribute(CONFIG.replacedAttr, "true");
     block.style.setProperty("--tf-image-blocker-color", getBlockColor());
     copyBoxStyles(element, block, computed);
 
-    element.setAttribute(REPLACED_ATTR, "true");
+    element.setAttribute(CONFIG.replacedAttr, "true");
     element.replaceWith(block);
   }
 
@@ -113,13 +158,14 @@
       element.style.backgroundImage = "none";
       element.style.backgroundColor = getBlockColor();
       element.style.setProperty("--tf-image-blocker-color", getBlockColor());
-      element.classList.add(BLOCK_CLASS);
+      element.classList.add(CONFIG.blockClass);
     }
   }
 
   function syncBlockColors() {
     const color = getBlockColor();
-    document.querySelectorAll(`.${BLOCK_CLASS}`).forEach((element) => {
+    const selector = `.${CSS.escape(CONFIG.blockClass)}`;
+    document.querySelectorAll(selector).forEach((element) => {
       element.style.setProperty("--tf-image-blocker-color", color);
       element.style.backgroundColor = color;
     });
@@ -130,7 +176,7 @@
       return;
     }
 
-    if (element.matches("img, picture, video")) {
+    if (element.matches(CONFIG.mediaSelector)) {
       replaceWithBlock(element);
       return;
     }
@@ -149,7 +195,7 @@
       blockElement(root);
     }
 
-    root.querySelectorAll("picture, img, video, [style], div, a, span, section, article, header, footer, main, li, button").forEach(blockElement);
+    root.querySelectorAll(`${CONFIG.mediaSelector}, ${CONFIG.backgroundCandidateSelector}`).forEach(blockElement);
   }
 
   function observePage() {
@@ -173,12 +219,13 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: OBSERVED_ATTRS
+      attributeFilter: CONFIG.observedAttributes
     });
   }
 
   function run() {
     installStyle();
+    injectCSS(CONFIG.customCssRules);
     blockTree(document);
     observePage();
     darkModeQuery.addEventListener("change", syncBlockColors);
