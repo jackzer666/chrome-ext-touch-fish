@@ -1,0 +1,175 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: Canvas;
+  color: CanvasText;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.popup {
+  box-sizing: border-box;
+  width: 320px;
+  padding: 14px;
+}
+
+.header,
+.listHeader,
+.domainItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+h2 {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.domain {
+  max-width: 220px;
+  margin-top: 4px;
+  color: color-mix(in srgb, CanvasText 62%, Canvas);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.switch {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.switch span {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 18%, Canvas);
+  transition: background 0.15s ease;
+}
+
+.switch span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: Canvas;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 24%);
+  content: "";
+  transition: transform 0.15s ease;
+}
+
+.switch input:checked + span {
+  background: #1473e6;
+}
+
+.switch input:checked + span::after {
+  transform: translateX(18px);
+}
+
+.primary {
+  width: auto;
+  min-height: 30px;
+  margin: 12px 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #1473e6;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.listSection {
+  border-top: 1px solid color-mix(in srgb, CanvasText 14%, Canvas);
+  padding-top: 10px;
+}
+
+.listHeader span {
+  min-width: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 10%, Canvas);
+  color: color-mix(in srgb, CanvasText 70%, Canvas);
+  font-size: 12px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.domainList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.domainItem {
+  min-height: 26px;
+  border-radius: 6px;
+  background: color-mix(in srgb, CanvasText 7%, Canvas);
+  padding: 3px 6px;
+}
+
+.domainName {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.remove {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #d12f2f;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  padding: 0 4px;
+}
+
+.empty {
+  margin-top: 10px;
+  color: color-mix(in srgb, CanvasText 54%, Canvas);
+  font-size: 13px;
+}

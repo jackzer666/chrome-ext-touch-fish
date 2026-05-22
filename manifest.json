@@ -3,14 +3,23 @@
   "name": "摸鱼图片视频遮罩",
   "description": "在指定网站中将图片和视频替换为跟随深浅色模式的纯色块。",
   "version": "0.1.0",
-  "permissions": [],
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "摸鱼图片视频遮罩"
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://www.xiaohongshu.com/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": [
         "src/config.js",
+        "src/shared.js",
         "src/content.js"
       ],
       "run_at": "document_start",
