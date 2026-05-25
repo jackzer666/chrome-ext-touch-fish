@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "摸鱼图片视频遮罩",
   "description": "在指定网站中将图片和视频替换为跟随深浅色模式的纯色块。",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "permissions": [
     "activeTab",
     "storage"

@@ -1,5 +1,5 @@
 import { contentConfig, type CustomCssRule, type TouchFishConfig } from "./config";
-import { domainListMatches, normalizeHostname, readSettings } from "./settings";
+import { findDomainRule, normalizeHostname, readSettings, type DomainRule } from "./settings";
 
 const DEFAULT_CONFIG: TouchFishConfig = {
   faviconSvg: [
@@ -10,6 +10,7 @@ const DEFAULT_CONFIG: TouchFishConfig = {
     "</svg>"
   ].join(""),
   blockClass: "tf-image-blocker-block",
+  pageDimmerClass: "tf-page-dimmer",
   replacedAttr: "data-tf-image-blocker-replaced",
   styleId: "tf-image-blocker-style",
   customStyleId: "tf-image-blocker-custom-style",
@@ -21,6 +22,7 @@ const DEFAULT_CONFIG: TouchFishConfig = {
   observedAttributes: ["src", "srcset", "style", "class", "poster"],
   mediaSelector: "img, picture, video",
   backgroundCandidateSelector: "[style], div, a, span, section, article, header, footer, main, li, button",
+  pageBrightness: 0.72,
   customCssRules: []
 };
 
@@ -36,7 +38,11 @@ const CONFIG: TouchFishConfig = {
     : DEFAULT_CONFIG.observedAttributes,
   customCssRules: Array.isArray(contentConfig.customCssRules) ? contentConfig.customCssRules : [],
   mediaSelector: contentConfig.mediaSelector || DEFAULT_CONFIG.mediaSelector,
-  backgroundCandidateSelector: contentConfig.backgroundCandidateSelector || DEFAULT_CONFIG.backgroundCandidateSelector
+  backgroundCandidateSelector: contentConfig.backgroundCandidateSelector || DEFAULT_CONFIG.backgroundCandidateSelector,
+  pageBrightness:
+    typeof contentConfig.pageBrightness === "number" && Number.isFinite(contentConfig.pageBrightness)
+      ? Math.min(Math.max(contentConfig.pageBrightness, 0.1), 1)
+      : DEFAULT_CONFIG.pageBrightness
 };
 
 const darkModeQuery = window.matchMedia(CONFIG.colorSchemeQuery);
@@ -79,14 +85,28 @@ const getHostname = () => {
   return normalizeHostname(window.location.hostname);
 };
 
-const shouldRun = async () => {
+type EnabledFeatures = Pick<DomainRule, "blockMedia" | "dimPage">;
+
+const getEnabledFeatures = async (): Promise<EnabledFeatures | null> => {
   const hostname = getHostname();
   if (!hostname || typeof chrome === "undefined" || !chrome.storage?.local) {
-    return false;
+    return null;
   }
 
   const settings = await readSettings();
-  return settings.enabled && domainListMatches(hostname, settings.domains);
+  if (!settings.enabled) {
+    return null;
+  }
+
+  const rule = findDomainRule(hostname, settings.domains);
+  if (!rule || (!rule.blockMedia && !rule.dimPage)) {
+    return null;
+  }
+
+  return {
+    blockMedia: rule.blockMedia,
+    dimPage: rule.dimPage
+  };
 };
 
 const getBlockColor = () => {
@@ -109,14 +129,24 @@ const appendToDocumentHead = (element: HTMLElement) => {
   target.appendChild(element);
 };
 
-const installStyle = () => {
+const installStyle = (features: EnabledFeatures) => {
   if (document.getElementById(CONFIG.styleId)) {
     return;
   }
 
-  const style = document.createElement("style");
-  style.id = CONFIG.styleId;
-  style.textContent = `
+  const dimmerStyle = features.dimPage
+    ? `
+    .${CONFIG.pageDimmerClass} {
+      background: rgba(0, 0, 0, ${1 - CONFIG.pageBrightness}) !important;
+      inset: 0 !important;
+      pointer-events: none !important;
+      position: fixed !important;
+      z-index: 2147483647 !important;
+    }
+`
+    : "";
+  const blockStyle = features.blockMedia
+    ? `
     .${CONFIG.blockClass} {
       background: var(--tf-image-blocker-color, #000) !important;
       background-image: none !important;
@@ -124,9 +154,25 @@ const installStyle = () => {
       color: transparent !important;
       overflow: hidden !important;
     }
-  `;
+`
+    : "";
+
+  const style = document.createElement("style");
+  style.id = CONFIG.styleId;
+  style.textContent = `${dimmerStyle}${blockStyle}`;
 
   appendToDocumentHead(style);
+};
+
+const installPageDimmer = () => {
+  if (document.querySelector(`.${CSS.escape(CONFIG.pageDimmerClass)}`)) {
+    return;
+  }
+
+  const dimmer = document.createElement("div");
+  dimmer.className = CONFIG.pageDimmerClass;
+  dimmer.setAttribute("aria-hidden", "true");
+  document.documentElement.appendChild(dimmer);
 };
 
 const injectCSS = (rules: CustomCssRule[]) => {
@@ -283,8 +329,6 @@ const blockElement = (element: Element) => {
 };
 
 const blockTree = (root: Element | Document) => {
-  installStyle();
-
   if (root instanceof Element) {
     blockElement(root);
   }
@@ -317,26 +361,31 @@ const observePage = () => {
   });
 };
 
-const run = () => {
-  if (window.top === window) {
+const run = (features: EnabledFeatures) => {
+  if (features.blockMedia && window.top === window) {
     replaceFavicon();
     observeFavicon();
   }
-  installStyle();
+  installStyle(features);
+  if (features.dimPage) {
+    installPageDimmer();
+  }
   injectCSS(CONFIG.customCssRules);
-  blockTree(document);
-  observePage();
-  darkModeQuery.addEventListener("change", syncBlockColors);
+  if (features.blockMedia) {
+    blockTree(document);
+    observePage();
+    darkModeQuery.addEventListener("change", syncBlockColors);
+  }
 };
 
-shouldRun().then((enabled) => {
-  if (!enabled) {
+getEnabledFeatures().then((features) => {
+  if (!features) {
     return;
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", run, { once: true });
+    document.addEventListener("DOMContentLoaded", () => run(features), { once: true });
   } else {
-    run();
+    run(features);
   }
 });

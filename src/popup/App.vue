@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import {
-  domainListMatches,
+  createDomainRule,
+  getDomainRuleKey,
+  type DomainFeatureKey,
+  type DomainRule,
   domainMatches,
-  normalizeDomains,
+  normalizeDomainInput,
+  normalizeDomainRules,
   parsePageHostname,
   readSettings,
   writeSettings
@@ -12,13 +16,20 @@ import {
 const enabled = ref(true);
 const activeTabId = ref<number | null>(null);
 const currentHostname = ref("");
-const domains = ref<string[]>([]);
+const domainInput = ref("");
+const domains = ref<DomainRule[]>([]);
 
 const currentDomainLabel = computed(() => currentHostname.value || "当前页面不支持");
-const currentDomainAdded = computed(
-  () => Boolean(currentHostname.value) && domainListMatches(currentHostname.value, domains.value)
+const secondLevelHostname = computed(() => {
+  const parts = currentHostname.value.split(".").filter(Boolean);
+  return parts.length >= 2 ? parts.slice(-2).join(".") : currentHostname.value;
+});
+const normalizedInput = computed(() => normalizeDomainInput(domainInput.value));
+const normalizedInputLabel = computed(() => (normalizedInput.value.domain ? getDomainRuleKey(normalizedInput.value) : ""));
+const currentDomainAdded = computed(() =>
+  domains.value.some((rule) => getDomainRuleKey(rule) === getDomainRuleKey(normalizedInput.value))
 );
-const addButtonText = computed(() => (currentDomainAdded.value ? "当前域名已添加" : "添加当前域名"));
+const addButtonText = computed(() => (currentDomainAdded.value ? "规则已添加" : "添加规则"));
 
 const reloadActiveTab = () => {
   if (activeTabId.value !== null) {
@@ -26,22 +37,50 @@ const reloadActiveTab = () => {
   }
 };
 
-const addCurrentDomain = async () => {
-  if (!currentHostname.value || currentDomainAdded.value) {
+const setDomainInput = (value: string) => {
+  domainInput.value = value;
+};
+
+const addDomain = async () => {
+  if (!normalizedInput.value.domain || currentDomainAdded.value) {
     return;
   }
 
-  domains.value = normalizeDomains([...domains.value, currentHostname.value]);
+  domains.value = normalizeDomainRules([
+    ...domains.value,
+    createDomainRule(getDomainRuleKey(normalizedInput.value))
+  ]);
   await writeSettings({ domains: domains.value });
   reloadActiveTab();
 };
 
-const removeDomain = async (domain: string) => {
-  const removedCurrentDomain = domainMatches(currentHostname.value, domain);
-  domains.value = normalizeDomains(domains.value.filter((item) => item !== domain));
+const removeDomain = async (rule: DomainRule) => {
+  const removedCurrentDomain = domainMatches(currentHostname.value, rule);
+  domains.value = normalizeDomainRules(domains.value.filter((item) => getDomainRuleKey(item) !== getDomainRuleKey(rule)));
   await writeSettings({ domains: domains.value });
 
   if (removedCurrentDomain) {
+    reloadActiveTab();
+  }
+};
+
+const toggleDomainFeature = async (rule: DomainRule, feature: DomainFeatureKey) => {
+  const changedCurrentDomain = domainMatches(currentHostname.value, rule);
+  domains.value = normalizeDomainRules(
+    domains.value.map((item) => {
+      if (getDomainRuleKey(item) !== getDomainRuleKey(rule)) {
+        return item;
+      }
+
+      return {
+        ...item,
+        [feature]: !item[feature]
+      };
+    })
+  );
+  await writeSettings({ domains: domains.value });
+
+  if (changedCurrentDomain) {
     reloadActiveTab();
   }
 };
@@ -55,6 +94,7 @@ onMounted(async () => {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeTabId.value = activeTab?.id ?? null;
   currentHostname.value = parsePageHostname(activeTab?.url || "");
+  domainInput.value = currentHostname.value;
 
   const settings = await readSettings();
   enabled.value = settings.enabled;
@@ -75,9 +115,39 @@ onMounted(async () => {
       </label>
     </header>
 
-    <button class="primary" type="button" :disabled="!currentHostname || currentDomainAdded" @click="addCurrentDomain">
-      {{ addButtonText }}
-    </button>
+    <section class="addSection" aria-label="添加域名规则">
+      <div class="domainChoices">
+        <button
+          class="choice"
+          type="button"
+          :disabled="!currentHostname"
+          @click="setDomainInput(currentHostname)"
+        >
+          完整域名
+        </button>
+        <button
+          class="choice"
+          type="button"
+          :disabled="!secondLevelHostname"
+          @click="setDomainInput(`*.${secondLevelHostname}`)"
+        >
+          二级域名
+        </button>
+      </div>
+      <div class="addRow">
+        <input
+          v-model="domainInput"
+          class="domainInput"
+          type="text"
+          placeholder="example.com 或 *.example.com"
+          aria-label="域名规则"
+        >
+        <button class="primary" type="button" :disabled="!normalizedInput.domain || currentDomainAdded" @click="addDomain">
+          {{ addButtonText }}
+        </button>
+      </div>
+      <p v-if="normalizedInputLabel" class="domainHint">将添加：{{ normalizedInputLabel }}</p>
+    </section>
 
     <section class="listSection" aria-label="已启用域名">
       <div class="listHeader">
@@ -85,9 +155,31 @@ onMounted(async () => {
         <span>{{ domains.length }}</span>
       </div>
       <ul v-if="domains.length > 0" class="domainList">
-        <li v-for="domain in domains" :key="domain" class="domainItem">
-          <span class="domainName">{{ domain }}</span>
-          <button class="remove" type="button" @click="removeDomain(domain)">移除</button>
+        <li v-for="rule in domains" :key="getDomainRuleKey(rule)" class="domainItem">
+          <div class="domainInfo">
+            <span class="domainName">{{ getDomainRuleKey(rule) }}</span>
+            <div class="featureToggles" aria-label="域名功能">
+              <label class="featureToggle">
+                <input
+                  :checked="rule.blockMedia"
+                  type="checkbox"
+                  :aria-label="`${rule.domain} 图片替换`"
+                  @change="toggleDomainFeature(rule, 'blockMedia')"
+                >
+                <span>图片替换</span>
+              </label>
+              <label class="featureToggle">
+                <input
+                  :checked="rule.dimPage"
+                  type="checkbox"
+                  :aria-label="`${rule.domain} 降低亮度`"
+                  @change="toggleDomainFeature(rule, 'dimPage')"
+                >
+                <span>降低亮度</span>
+              </label>
+            </div>
+          </div>
+          <button class="remove" type="button" @click="removeDomain(rule)">移除</button>
         </li>
       </ul>
       <p v-else class="empty">暂无域名</p>

@@ -8,6 +8,7 @@ export type CustomCssRule = {
 export type TouchFishConfig = {
   faviconSvg: string;
   blockClass: string;
+  pageDimmerClass: string;
   replacedAttr: string;
   styleId: string;
   customStyleId: string;
@@ -19,34 +20,12 @@ export type TouchFishConfig = {
   observedAttributes: string[];
   mediaSelector: string;
   backgroundCandidateSelector: string;
+  pageBrightness: number;
   customCssRules: CustomCssRule[];
 };
 
 export const contentConfig: Partial<TouchFishConfig> = {
-  blockClass: "tf-image-blocker-block",
-  replacedAttr: "data-tf-image-blocker-replaced",
-  styleId: "tf-image-blocker-style",
-  customStyleId: "tf-image-blocker-custom-style",
-  colorSchemeQuery: "(prefers-color-scheme: dark)",
-  blockColors: {
-    dark: "#000",
-    light: "#fff"
-  },
-  observedAttributes: ["src", "srcset", "style", "class", "poster"],
-  mediaSelector: "img, picture, video",
-  backgroundCandidateSelector: [
-    "[style]",
-    "div",
-    "a",
-    "span",
-    "section",
-    "article",
-    "header",
-    "footer",
-    "main",
-    "li",
-    "button"
-  ].join(", "),
+  pageBrightness: 0.5,
   customCssRules: [
     {
       selector: ".note-detail-follow-btn",
